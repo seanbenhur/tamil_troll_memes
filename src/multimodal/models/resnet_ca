@@ -6,93 +6,21 @@ import torch
 import torch.nn.functional as F
 
 
-class CAModel(nn.Module):
+    
+
+class Resnet101CAModel(nn.Module):
     def __init__(
         self,
-        image_pretrained,
-        text_pretrained,
-        use_pretrained_image,
-        dropout
+        model_args
     ):
         super().__init__()
-        self.image_model = timm.create_model(
-            image_pretrained, pretrained=use_pretrained_image
-        )
-        self.text_model_config = AutoConfig.from_pretrained(text_pretrained)
-        self.text_model = AutoModel.from_pretrained(text_pretrained)
-        self.image_model_out = nn.Linear(self.image_model.head.in_features, 512)
-        self.text_model_out = nn.Linear(self.text_model_config.hidden_size, 512)
-        self.drop = nn.Dropout(dropout)
-
-        self.dense_enc_512 = nn.Linear(1000, 512)
-        self.gen_key_L1 = nn.Linear(512, 256)  # 512X256
-        self.gen_query_L1 = nn.Linear(512, 256)  # 512X256
-        self.gen_key_L2 = nn.Linear(512, 256)  # 512X256
-        self.gen_query_L2 = nn.Linear(512, 256)  # 512X256
-
-        self.project_dense_512a = nn.Linear(1024, 512)  # 512X256
-        self.project_dense_512b = nn.Linear(1024, 512)  # 512X256
-
-        self.fc_out = nn.Linear(512, 256)  # 512X256
-        # self.out = nn.Linear(256, n_out) # 512X256
-        self.final_layer = nn.Linear(256, 1)
-
-    def cross_attention_image_text(self, vec_1, vec_2):
-        query_1 = F.relu(self.gen_query_L2(vec_1))
-        key_1 = F.relu(self.gen_key_L2(vec_1))
-        query_2 = F.relu(self.gen_query_L2(vec_2))
-        key_2 = F.relu(self.gen_key_L2(vec_2))
-        score_1 = torch.reshape(
-            torch.bmm(query_1.view(-1, 1, 256), key_2.view(-1, 256, 1)), (-1, 1)
-        )
-        score_2 = torch.reshape(
-            torch.bmm(query_2.view(-1, 1, 256), key_1.view(-1, 256, 1)), (-1, 1)
-        )
-        weight_score_1_2_matrix = torch.cat((score_1, score_2), 1)
-        weight_i1_i2 = F.softmax(weight_score_1_2_matrix.float())  # probabilities
-        prob_1 = weight_i1_i2[:, 0]
-        prob_2 = weight_i1_i2[:, 1]
-        wtd_i1 = vec_1 * prob_1[:, None]
-        wtd_i2 = vec_2 * prob_2[:, None]
-        out_rep = F.relu(self.project_dense_512b(torch.cat((wtd_i1, wtd_i2), 1)))
-        return out_rep
-
-    def forward(
-        self,
-        img,
-        caption_input_ids,
-        caption_attention_mask
-    ):
        
-        caption_model_output = self.text_model(
-            input_ids=caption_input_ids, attention_mask=caption_attention_mask
-        )
-        caption_text_out = self.text_model_out(caption_model_output["pooler_output"])
-        img_out = self.image_model(img)
-
-        encoder_feat = self.drop(F.relu(self.dense_enc_512(img_out)))
-        ca_img_text = self.cross_attention_image_text(caption_text_out, encoder_feat)
-
-        fc_out = F.relu(self.fc_out(ca_img_text))
-        output = self.final_layer(fc_out)
-        return output
-    
-    
-
-class ResnetCAModel(nn.Module):
-    def __init__(
-        self,
-        text_pretrained,
-        use_pretrained_image,
-        dropout
-    ):
-        super().__init__()
-        self.image_model = models.resnet101(pretrained=True)
-        self.text_model_config = AutoConfig.from_pretrained(text_pretrained)
-        self.text_model = AutoModel.from_pretrained(text_pretrained)
+        self.image_model = models.resnet101(pretrained=model_args.pretrained)
+        self.text_model_config = AutoConfig.from_pretrained(model_args.text_pretrained)
+        self.text_model = AutoModel.from_pretrained(model_args.text_pretrained)
         self.image_model_out = nn.Linear(self.image_model.fc.in_features, 512)
         self.text_model_out = nn.Linear(self.text_model_config.hidden_size, 512)
-        self.drop = nn.Dropout(dropout)
+        self.drop = nn.Dropout(model_args.dropout)
 
         self.dense_enc_512 = nn.Linear(1000, 512)
         self.gen_key_L1 = nn.Linear(512, 256)  # 512X256
@@ -147,32 +75,52 @@ class ResnetCAModel(nn.Module):
         output = self.final_layer(fc_out)
         return output
 
-
-
-class ConcatModel(nn.Module):
+    
+    
+class Resnet50CAModel(nn.Module):
     def __init__(
-        self,
-        image_pretrained,
-        text_pretrained,
-        use_pretrained_image,
-        dropout
+        self,model_args
     ):
         super().__init__()
-        self.image_model = timm.create_model(
-            image_pretrained, pretrained=use_pretrained_image
-        )
-        self.text_model_config = AutoConfig.from_pretrained(text_pretrained)
-        self.text_model = AutoModel.from_pretrained(text_pretrained)
-        self.image_model_out = nn.Linear(self.image_model.head.in_features, 512)
+        self.image_model = models.resnet50(pretrained=model_args.pretrained)
+        self.text_model_config = AutoConfig.from_pretrained(model_args.text_pretrained)
+        self.text_model = AutoModel.from_pretrained(model_args.text_pretrained)
+        self.image_model_out = nn.Linear(self.image_model.fc.in_features, 512)
         self.text_model_out = nn.Linear(self.text_model_config.hidden_size, 512)
-        self.drop = nn.Dropout(dropout)
+        self.drop = nn.Dropout(model_args.dropout)
 
-        
-        self.fc_out = nn.Linear(1512, 512)  # 512X256
-        # self.out = nn.Linear(256, n_out) 
-        self.final_layer = nn.Linear(512, 1)
+        self.dense_enc_512 = nn.Linear(1000, 512)
+        self.gen_key_L1 = nn.Linear(512, 256)  # 512X256
+        self.gen_query_L1 = nn.Linear(512, 256)  # 512X256
+        self.gen_key_L2 = nn.Linear(512, 256)  # 512X256
+        self.gen_query_L2 = nn.Linear(512, 256)  # 512X256
 
-  
+        self.project_dense_512a = nn.Linear(1024, 512)  # 512X256
+        self.project_dense_512b = nn.Linear(1024, 512)  # 512X256
+
+        self.fc_out = nn.Linear(512, 256)  # 512X256
+        # self.out = nn.Linear(256, n_out) # 512X256
+        self.final_layer = nn.Linear(256, 1)
+
+    def cross_attention_image_text(self, vec_1, vec_2):
+        query_1 = F.relu(self.gen_query_L2(vec_1))
+        key_1 = F.relu(self.gen_key_L2(vec_1))
+        query_2 = F.relu(self.gen_query_L2(vec_2))
+        key_2 = F.relu(self.gen_key_L2(vec_2))
+        score_1 = torch.reshape(
+            torch.bmm(query_1.view(-1, 1, 256), key_2.view(-1, 256, 1)), (-1, 1)
+        )
+        score_2 = torch.reshape(
+            torch.bmm(query_2.view(-1, 1, 256), key_1.view(-1, 256, 1)), (-1, 1)
+        )
+        weight_score_1_2_matrix = torch.cat((score_1, score_2), 1)
+        weight_i1_i2 = F.softmax(weight_score_1_2_matrix.float())  # probabilities
+        prob_1 = weight_i1_i2[:, 0]
+        prob_2 = weight_i1_i2[:, 1]
+        wtd_i1 = vec_1 * prob_1[:, None]
+        wtd_i2 = vec_2 * prob_2[:, None]
+        out_rep = F.relu(self.project_dense_512b(torch.cat((wtd_i1, wtd_i2), 1)))
+        return out_rep
 
     def forward(
         self,
@@ -187,10 +135,10 @@ class ConcatModel(nn.Module):
         caption_text_out = self.text_model_out(caption_model_output["pooler_output"])
         img_out = self.image_model(img)
 
-        concat = torch.cat([img_out,caption_text_out],dim=1)
-       
-        fc_out = F.relu(self.fc_out(concat))
-        
+        encoder_feat = self.drop(F.relu(self.dense_enc_512(img_out)))
+        ca_img_text = self.cross_attention_image_text(caption_text_out, encoder_feat)
+
+        fc_out = F.relu(self.fc_out(ca_img_text))
         output = self.final_layer(fc_out)
         return output
-
+    

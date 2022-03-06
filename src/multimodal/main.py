@@ -4,8 +4,9 @@ from torch.optim.lr_scheduler import OneCycleLR
 import auglib
 from transformers import AutoTokenizer
 import numpy as np
-from models import ConcatModel,CAModel,ResnetCAModel
+from models import ConcatModel,CAModel,Resnet101CAModel
 import logging
+from transformers import set_seed
 import torch
 from losses import bcewithlogits_loss_fn
 from train import Trainer
@@ -16,7 +17,7 @@ from accelerate import Accelerator, DeepSpeedPlugin
 import warnings
 warnings.filterwarnings('ignore')
 
-
+set_seed(24)
 
 logging.basicConfig(level = logging.INFO)
 #arguments
@@ -40,13 +41,13 @@ logging.info("***DATALOADERS ARE CREATED***")
 accelerator = Accelerator()    
 
 if model_args.fusion_method == "timm_crossattention":
-    model = CAModel(model_args.image_pretrained,model_args.text_pretrained,model_args.pretrained,model_args.dropout)
+    model = CAModel(model_args)
 
 elif model_args.fusion_method == "resnet_crossattention":
-    model = ResnetCAModel(model_args.text_pretrained,model_args.pretrained,model_args.dropout)
+    model = Resnet101CAModel(model_args)
 
 elif model_args.fusion_method == "concat":
-    model = ConcatModel(model_args.image_pretrained,model_args.text_pretrained,model_args.pretrained,model_args.dropout)
+    model = ConcatModel(model_args)
     
 else:
     raise RuntimeError(
@@ -94,10 +95,8 @@ else:
             "are supported."
         )
 
-
 if training_args.load_checkpoint:
-    checkpoint = torch.load(training_args.checkpoint_path)
-    load_checkpoint(checkpoint,model,optimizer,scheduler,scalar=None)
+    checkpoint = accelerator.load_state(training_args.checkpoint_path)
     
 #setup accelerator
 model, optimizer, train_dl, test_dl = accelerator.prepare(model, optimizer, train_dl, test_dl)
